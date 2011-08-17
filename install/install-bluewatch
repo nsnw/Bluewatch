@@ -1,0 +1,18 @@
+#!/bin/bash
+
+DB_SUSER=$1
+DB_SPASS=$2
+DB_NUSER=$3
+DB_NPASS=$4
+DB_NAME=$5
+DB_SCHEMA=$6
+
+CONFIG_DIR=$7
+BIN_DIR=$8
+LOG_DIR=$9
+RUN_DIR=${10}
+
+install/create-db $DB_SUSER $DB_SPASS $DB_NUSER $DB_NPASS $DB_NAME $DB_SCHEMA
+install/create-dirs $CONFIG_DIR $BIN_DIR $LOG_DIR $RUN_DIR
+install/create-config localhost $DB_NUSER $DB_NPASS $DB_NAME $LOG_DIR/bluewatch $RUN_DIR/bluewatch >$CONFIG_DIR/config.xml
+install/copy-files $BIN_DIR

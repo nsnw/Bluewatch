@@ -1,0 +1,436 @@
+#!/usr/bin/perl
+
+#-------------------------------------------------
+# Bluewatch
+# $Id: bluewatch 5 2009-05-07 00:03:35Z root $
+# (c) 2009 Andy Smith
+#-------------------------------------------------
+# Watches for and keeps a list of
+# visible Bluetooth devices.
+#-------------------------------------------------
+
+# Get SVN version
+my $svnId = '$Id: bluewatch 5 2009-05-07 00:03:35Z root $ ';
+my @svnParts = split(/ /, $svnId);
+my $version = sprintf("1.%03d" . $svnParts[2]);
+my $datestamp = $svnParts[3] . " " . $svnParts[4];
+
+# Set some options
+use strict;
+use warnings;
+
+# Load required modules
+use Net::Bluetooth;
+use Getopt::Std;
+use Config::XMLPerl;
+use DBI;
+# For debug. Can be removed once finished
+use Data::Dumper;
+
+# Instantiate options variables
+our($opt_s, $opt_l, $opt_d, $opt_x, $opt_a, $opt_h, $opt_b, $opt_r, $opt_q, $opt_c, $opt_e);
+
+# Options
+# -s = scan
+# -l = list (present) devices
+# -d = debug
+# -x = wipe DB
+# -a = (with list) all devices
+# -h = help
+# -q = query
+# -r = repeat
+# -b = background
+# -c = state change command
+
+# Load config
+my $config = new Config::XMLPerl("/etc/bluewatch/config.xml");
+
+# Set DB vars
+my $dsn = "DBI:mysql:database=" . sprintf $config->{sql}{database};
+my $dbu = sprintf $config->{sql}{user};
+my $dbp = sprintf $config->{sql}{pass};
+
+# Hash to hold devices in
+my %btDevices;
+
+# Misc variables
+my $timeNow = time();
+
+# Setup DB connection using DBI
+my $dbh = DBI->connect($dsn, $dbu, $dbp, {RaiseError => 1});
+
+# Get options
+getopts('slhdax:b:r:q:c:e:');
+
+if($opt_h) {
+	print "bluewatch v$version ($datestamp)\n";
+	print "(c) 2009 Andy Smith / Netprojects UK\n";
+	print "Watches and keeps track of visible bluetooth devices\n\n";
+	print "  -s             Scan for devices\n";
+	print "  -l             List visible devices\n";
+	print " (-a)            (with -l) List all devices\n";
+	print "  -q <mac|name>  Query for a device by MAC or name\n";
+	print "  -r <sec>       Daemon mode - scan every <sec> seconds\n";
+	print "  -b <sec>       Background mode - as per -r, but backgrounded\n";
+	print "  -c <mac|name>\n";
+	print "     -e <cmd>    Set the command executed when device state changes\n";
+	print "  -x             Wipe database\n";
+	print "  -d             Debug\n";
+	print "  -h             This help\n\n";
+	exit;
+}
+
+# Background daemon if -b
+if($opt_b) {
+	if($opt_b gt 1) {
+		print "Running 'bluewatch -r $opt_b' in the background...\n";
+		dolog("Running in background...");
+		exec("$0 -r $opt_b &");
+		exit;
+	}
+}
+
+# Load devices from DB
+load_from_db();
+
+# Query individual device
+if($opt_q) {
+	if($opt_q ne "")
+	{
+		my ($name, $addr, $first, $last, $present, $cmd, $found);
+		$found = 0;
+
+		if($btDevices{$opt_q})
+		{
+			$name    = $btDevices{$opt_q}->{'name'};
+			$addr    = $btDevices{$opt_q}->{'mac_address'};
+			$first   = make_time($btDevices{$opt_q}->{'first_seen'});
+			$last    = make_time($btDevices{$opt_q}->{'last_seen'});
+			$present = $btDevices{$opt_q}->{'present'};
+			$cmd     = $btDevices{$opt_q}->{'state_change'};
+			if($present eq 1)
+			{
+				$present = "Yes";
+			}
+			else
+			{
+				$present = "No";
+			}
+			$found = 1;
+		}
+		else
+		{
+			foreach my $device (keys %btDevices)
+			{
+				if($btDevices{$device}->{'name'} eq $opt_q)
+				{
+					$name    = $btDevices{$device}->{'name'};
+					$addr    = $btDevices{$device}->{'mac_address'};
+					$first   = make_time($btDevices{$device}->{'first_seen'});
+					$last    = make_time($btDevices{$device}->{'last_seen'});
+					$present = $btDevices{$device}->{'present'};
+					$cmd     = $btDevices{$device}->{'state_change'};
+					if($present eq 1)
+					{
+						$present = "Yes";
+					}
+					else
+					{
+						$present = "No";
+					}
+					$found = 1;
+				}
+			}
+		}
+
+		if($found eq 1)
+		{
+			print "Name       : $name\n";
+			print "MAC Address: $addr\n";
+			print "First seen : $first\n";
+			print "Last seen  : $last\n";
+			print "Command    : $cmd\n";
+			print "Present?   : $present\n";
+			exit;
+		}
+		else
+		{
+			print "Device '$opt_q' not found.\n";
+			exit;
+		}
+	}
+}
+
+# Change device state change command
+if($opt_c) {
+	if($opt_c ne "" && $opt_e ne "")
+	{
+		my ($db_id, $found);
+		$found = 0;
+
+		if($btDevices{$opt_c})
+		{
+			$db_id   = $btDevices{$opt_c}->{'db_id'};
+			$found = 1;
+		}
+		else
+		{
+			foreach my $device (keys %btDevices)
+			{
+				if($btDevices{$device}->{'name'} eq $opt_c)
+				{
+					$db_id   = $btDevices{$device}->{'db_id'};
+					$found = 1;
+				}
+			}
+		}
+
+		if($found eq 1)
+		{
+			set_device_state_change($db_id, $opt_e);
+			exit;
+		}
+		else
+		{
+			print "Device '$opt_c' not found.\n";
+			exit;
+		}
+	}
+}
+
+# Repeat if -r
+if($opt_r) {
+	if($opt_r gt 1)
+	{
+		dolog("Starting in daemon mode...");
+		while (1)
+		{
+			my $repStart = time();
+			scan_and_update();
+			my $repEnd = time();
+			my $repDiff = $repEnd - $repStart;
+			if($repDiff <= $opt_r)
+			{
+				my $waitSec = $opt_r - $repDiff;
+				debug("$waitSec to wait...");
+				sleep $waitSec;
+			}
+		}
+	}
+}
+
+# Wipe if -x
+if($opt_x) {
+	if($opt_x eq "yes") {
+		wipe_db();
+	}
+}
+
+# Scan if -s
+if($opt_s) {
+	scan_and_update();
+}
+
+# List if -l
+if($opt_l) {
+	my ($addr, $name, $last_seen, $present);
+format STDOUT_TOP =
+  MAC Address        Name                      Last seen            Present
+.
+format STDOUT =
+  @<<<<<<<<<<<<<<<<  @<<<<<<<<<<<<<<<<<<<<<<<  @<<<<<<<<<<<<<<<<<<  @<<<<<<
+  $addr, $name, $last_seen, $present
+.
+
+	foreach my $device (keys %btDevices)
+	{
+		$addr = $btDevices{$device}->{'mac_address'};
+		$name = $btDevices{$device}->{'name'};
+		$last_seen = make_time($btDevices{$device}->{'last_seen'});
+		$present = $btDevices{$device}->{'present'};
+		if($present eq 1)
+		{
+			$present = "Yes";
+		}
+		else
+		{
+			$present = "No";
+		}
+		if(($present eq "Yes") || ($opt_a))
+		{
+			write;
+		}
+	}
+}
+
+sub debug
+{
+	my ($debugStr) = @_;
+	if($opt_d)
+	{
+		print STDERR "DEBUG: $debugStr\n";
+	}
+}
+
+sub dolog
+{
+	my ($logStr) = @_;
+	open LOGFILE, ">>", sprintf $config->{file}{log};
+	flock LOGFILE, 2;
+
+	print LOGFILE make_time(time()) . ": " . $logStr . "\n";
+
+	flock LOGFILE, 8;
+	close LOGFILE;
+}
+
+sub make_time
+{
+	my ($unix_time) = @_;
+	my ($sec, $min, $hour, $mday, $mon, $year, $wday, $yday, $dst) = localtime($unix_time);
+
+	$year += 1900;
+	$mon++;
+
+	my $time = sprintf("%02d:%02d:%02d", $hour, $min, $sec);
+	my $date = sprintf("%02d-%02d-%04d", $mday, $mon, $year);
+
+	return $date . " " . $time;
+}
+
+sub wipe_db
+{
+	# Create lockfile
+	open LOCKFILE, ">", sprintf $config->{file}{run};
+	flock LOCKFILE, 2;
+
+	my $wipeDBQuery = $dbh->prepare('TRUNCATE devices');
+	debug("Wiping DB...");
+	dolog("Wiping database...");
+	$wipeDBQuery->execute;
+
+	flock LOCKFILE, 8;
+	close LOCKFILE;
+	unlink sprintf $config->{file}{run};
+}
+
+sub load_from_db
+{
+	my $getDevicesQuery = $dbh->prepare('SELECT * FROM devices');
+	debug("Loading from DB...");
+	$getDevicesQuery->execute;
+	while (my @devices = $getDevicesQuery->fetchrow_array())
+	{
+		$btDevices{$devices[1]}->{'db_id'} = $devices[0];
+		$btDevices{$devices[1]}->{'mac_address'} = $devices[1];
+		$btDevices{$devices[1]}->{'name'} = $devices[2];
+		$btDevices{$devices[1]}->{'first_seen'} = $devices[3];
+		$btDevices{$devices[1]}->{'last_seen'} = $devices[4];
+		$btDevices{$devices[1]}->{'state_change'} = $devices[6];
+		if(defined $btDevices{$devices[1]}->{'present'})
+		{
+			if($btDevices{$devices[1]}->{'present'} ne $devices[5])
+			{
+				my $mac     = $btDevices{$devices[1]}->{'mac_address'};
+				my $name    = $btDevices{$devices[1]}->{'name'};
+				my $present = $devices[5];
+
+				debug("State changed to " . $devices[5] . " for " . $devices[1] . " (" . $devices[2] . ")");
+				dolog("Device $mac ($name) now has a state of $present.");
+				if($btDevices{$devices[1]}->{'state_change'} ne "")
+				{
+					$_ = $btDevices{$devices[1]}->{'state_change'};
+					s/\%n/$name/g;
+					s/\%m/$mac/g;
+					s/\%p/$present/g;
+
+					my $cmd = $_;
+
+					debug("Spawning '$cmd'...");
+					system($cmd);
+
+				}
+			}
+		}
+		$btDevices{$devices[1]}->{'present'} = $devices[5];
+	}
+}
+
+sub scan_and_update
+{
+	# Create lockfile
+	open LOCKFILE, ">", sprintf $config->{file}{run};
+	flock LOCKFILE, 2;
+
+	scan();
+	update_present();
+	load_from_db();
+
+	flock LOCKFILE, 8;
+	close LOCKFILE;
+	unlink sprintf $config->{file}{run};
+}
+
+sub scan
+{
+	$timeNow = time();
+	debug("Scanning...");
+	my $device_ref = get_remote_devices();
+	foreach my $addr (keys %$device_ref)
+	{
+		debug("Got $addr...");
+		if($btDevices{$addr})
+		{
+			update_device($device_ref->{$addr}, $addr, $timeNow, 1, $btDevices{$addr}->{'db_id'});
+		}
+		else
+		{
+			add_device($device_ref->{$addr}, $addr, $timeNow, 1);
+		}
+	}
+}
+
+sub update_device
+{
+	my ($devName, $devAddr, $devLast, $devPresent, $devID) = @_;
+	my $query;
+	if($devName eq "[unknown]")
+	{
+		$query = "UPDATE devices SET lastseen = ?, present = ? WHERE id = ?";
+		my $updateDeviceQuery = $dbh->prepare($query);
+		debug("Updating $devAddr ($devName)...");
+		$updateDeviceQuery->execute($devLast, $devPresent, $devID);
+	}
+	else
+	{
+		$query = "UPDATE devices SET name = ?, lastseen = ?, present = ? WHERE id = ?";
+		my $updateDeviceQuery = $dbh->prepare($query);
+		debug("Updating $devAddr ($devName)...");
+		$updateDeviceQuery->execute($devName, $devLast, $devPresent, $devID);
+	}
+}
+
+sub add_device
+{
+	my ($devName, $devAddr, $devFirst, $devPresent) = @_;
+	my $insertDeviceQuery = $dbh->prepare('INSERT INTO devices (mac, name, firstseen, lastseen, present) VALUES (?, ?, ?, ?, ?)');
+
+	debug("Adding $devAddr ($devName)...");
+	dolog("New device $devAddr ($devName) found.");
+	$insertDeviceQuery->execute($devAddr, $devName, $devFirst, $devFirst, $devPresent);
+}
+
+sub update_present
+{
+	my $updatePresentQuery = $dbh->prepare('UPDATE devices SET present = 0 WHERE lastseen != ?');
+	debug("Updating present status...");
+	$updatePresentQuery->execute($timeNow);
+}
+
+sub set_device_state_change
+{
+	my ($db_id, $cmd) = @_;
+	my $devStateChangeQuery = $dbh->prepare('UPDATE devices SET state_change = ? WHERE id = ?');
+	debug("Updating device state change command...");
+	$devStateChangeQuery->execute($cmd, $db_id);
+}

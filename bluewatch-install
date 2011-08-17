@@ -1,0 +1,37 @@
+#!/bin/bash
+
+# Install script for bluewatch
+
+echo "Bluewatch install script"
+echo ""
+echo "This is a quick and dirty install script to speed things up."
+echo "There's not much in the way of error-checking, so if you're"
+echo "cursed^Wblessed with fat fingers, be warned."
+echo ""
+echo -n "DB superuser (e.g. root): "
+read db_superuser
+echo -n "DB superuser's password: "
+read db_superpass
+echo -n "DB non-priv user (will be created): "
+read db_nu
+echo -n "DB name: "
+read db_name
+
+echo -n "Are you sure? (y/N): "
+read yn
+
+if [ X"$yn" != X"y" ] && [ X"$yn" != X"Y" ]; then
+	exit
+fi
+
+if [ X"$db_superuser" = X"" ] || [ X"$db_superpass" = X"" ] || [ X"$db_name" = X"" ]; then
+	exit
+fi
+
+echo "Installing..."
+
+db_np=`dd if=/dev/urandom bs=100 count=1 2>&1 | md5sum | cut -f1 -d" " | cut -c10-17`
+
+echo "Auto-generated password for non-priv user '$db_nu' is '$db_np'."
+
+install/install-bluewatch $db_superuser $db_superpass $db_nu $db_np $db_name sql/bluewatch.sql /etc/bluewatch /usr/bin /var/log /var/run

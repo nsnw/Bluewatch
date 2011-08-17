@@ -1,0 +1,12 @@
+#!/bin/bash
+
+BIN_DIR=$1
+
+if [ X"$BIN_DIR" = X"" ]; then
+	echo "Missing option."
+	echo "Usage: $0 bin-dir"
+	exit
+fi
+
+echo "Copying 'bluewatch' to $BIN_DIR."
+cp bin/bluewatch $BIN_DIR

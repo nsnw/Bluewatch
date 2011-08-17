@@ -1,0 +1,31 @@
+#!/bin/bash
+
+DB_SUSER=$1
+DB_SPASS=$2
+DB_NUSER=$3
+DB_NPASS=$4
+DB_NAME=$5
+DB_SCHEMA=$6
+
+MYSQL_BIN=`which mysql`
+MYSQLADMIN_BIN=`which mysqladmin`
+
+if [ X"$DB_SUSER" = X"" ] || [ X"$DB_SPASS" = X"" ] || [ X"$DB_NUSER" = X"" ] || [ X"$DB_NPASS" = X"" ] || [ X"$DB_NAME" = X"" ] || [ X"$DB_SCHEMA" = X"" ]; then
+	echo "Missing option."
+	echo "Usage: $0 mysql-superuser-username mysql-superuser-password mysql-nonpriv-username mysql-nonpriv-password database-name path-to-db-schema-file"
+	exit
+fi
+
+# Drop and create database
+echo "Dropping DB."
+$MYSQLADMIN_BIN -u$DB_SUSER -p$DB_SPASS --force --silent drop $DB_NAME
+echo "Creating DB."
+$MYSQLADMIN_BIN -u$DB_SUSER -p$DB_SPASS create $DB_NAME
+
+# Import schema
+echo "Importing schema."
+$MYSQL_BIN -u$DB_SUSER -p$DB_SPASS $DB_NAME <$DB_SCHEMA
+
+# Grant rights
+echo "Granting rights to non-priv user."
+echo "GRANT ALL ON * TO $DB_NUSER@localhost IDENTIFIED BY '$DB_NPASS'" | $MYSQL_BIN -u$DB_SUSER -p$DB_SPASS $DB_NAME

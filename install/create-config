@@ -1,0 +1,19 @@
+#!/bin/bash
+
+DB_HOST=$1
+DB_USER=$2
+DB_PASS=$3
+DB_NAME=$4
+
+FILE_LOG=$5
+FILE_RUN=$6
+
+if [ X"$DB_HOST" = X"" ] || [ X"$DB_USER" = X"" ] || [ X"$DB_PASS" = X"" ] || [ X"$DB_NAME" = X"" ] || [ X"$FILE_LOG" = X"" ] || [ X"$FILE_RUN" = X"" ]; then
+	echo "Missing option(s)."
+	echo "Usage: $0 db-host db-user db-pass db-name file-log file-run"
+	exit
+fi
+
+echo "<?xml version=\"1.0\">
+<sql server=\"$DB_HOST\" user=\"$DB_USER\" pass=\"$DB_PASS\" database=\"$DB_NAME\" />
+<file log=\"$FILE_LOG\" run=\"$FILE_RUN\" />"

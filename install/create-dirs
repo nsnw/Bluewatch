@@ -1,0 +1,32 @@
+#!/bin/bash
+
+CONFIG_DIR=$1
+BIN_DIR=$2
+LOG_DIR=$3
+RUN_DIR=$4
+
+if [ X"$CONFIG_DIR" = X"" ] || [ X"$BIN_DIR" = X"" ] || [ X"$LOG_DIR" = X"" ] || [ X"$RUN_DIR" = X"" ]; then
+	echo "Missing option(s)."
+	echo "Usage: $0 config-dir bin-dir log-dir run-dir"
+	exit
+fi
+
+if [ ! -d $CONFIG_DIR ]; then
+	echo "Creating config dir at $CONFIG_DIR."
+	mkdir -p $CONFIG_DIR
+fi
+
+if [ ! -d $BIN_DIR ]; then
+	echo "Creating bin dir at $BIN_DIR."
+	mkdir -p $BIN_DIR
+fi
+
+if [ ! -d $LOG_DIR ]; then
+	echo "Creating log dir at $LOG_DIR."
+	mkdir -p $LOG_DIR
+fi
+
+if [ ! -d $RUN_DIR ]; then
+	echo "Creating run dir at $RUN_DIR."
+	mkdir -p $RUN_DIR
+fi

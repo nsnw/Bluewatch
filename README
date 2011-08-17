@@ -1,0 +1,118 @@
+_______________________________________________________________________
+ _        _        ___ _        |                                      \ \  \   \    \
+|_)|  | ||_ | | //| / /  / /(o) | Bluewatch                             | |  |   |    |
+|_)|_ |_||_ |/|//^|/ /_ /^/ (o) | (c) 2009 Andy Smith / Netprojects UK  | |  |   |    |
+________________________________|______________________________________/ /  /   /    /
+
+Preamble
+--------
+
+Bluewatch is a tool to scan for, and keep a log of Bluetooth devices
+within range of the host that it is running on. It allows for queries
+against its database, and has a facility for executing commands based
+on a device becoming visible or moving out of range.
+
+Bluewatch is written in Perl, and has a couple of dependencies - see
+the next section for details
+
+Requirements
+------------
+
+* Linux
+
+* A supported Bluetooth device (i.e. a USB 'dongle')
+  - I have only tested this with a CSR USB dongle, however
+    it will work with anything which Net::Bluetooth, and in
+	turn Bluez can recognise.
+
+* Perl
+  - Net::Bluetooth
+    - For scanning for Bluetooth devices
+  - Config::XMLPerl
+    - For config file support
+  - DBI
+    - For backend database support
+
+Installation
+------------
+
+There are two ways to install Bluewatch:-
+
+1) Automatic
+
+Run ./bluewatch-install and follow the prompts.
+
+2) Manual
+
+Copy:-
+
+* bin/bluewatch to /usr/bin (or similar)
+* create /etc/bluewatch/config.xml with similar to the following:-
+
+<?xml version="1.0">
+<sql server="localhost" user="bw" pass="4b8ac59c" database="bluewatch" />
+<file log="/var/log/bluewatch" run="/var/run/bluewatch" />
+
+* create a MySQL database, with user access as per the config file
+* import the schema from sql/bluewatch.sql
+
+Usage
+-----
+
+bluewatch -h will give you a list of possible options.
+
+In brief, though:-
+
+  -s				Scan for devices, and update DB
+  -l				List present devices
+  -la				List all devices
+  -q string			Query for a device by MAC or name (case sensitive)
+  -x				Wipes the database
+  -c device -e cmd  Sets the command executed upon a state change for 'device' to 'cmd'
+  -r secs			Repeatedly scan, waiting a minimum of 'secs' seconds between runs
+  -b secs			As per -r, but background the process
+
+Warning
+-------
+
+It's worth pointing out the possible security implications of the 'state change command'
+part of Bluewatch, which will cause a command to be executed with the permissions of
+the user that bluewatch is daemonised under. If somebody was to gain access to your
+database, that somebody could change the executed command to something destructive.
+
+Consider the implications before enabling this functionality!
+
+Bugs
+----
+
+There'll be plenty. Please let me know - my email address is andy.smith@netprojects.org.uk.
+
+License
+-------
+Bluewatch is released under the BSD license.
+
+(c) 2009 Andy Smith / Netprojects UK
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+3. The name of the author may not be used to endorse or promote products
+   derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
